@@ -3,23 +3,12 @@ const nextConfig = {
   reactStrictMode: true,
   trailingSlash: false,
   async rewrites() {
-    return {
-      beforeFiles: [
-        {
-          source: '/:path*',
-          has: [
-            {
-              type: 'query',
-              key: 'rewrite',
-              value: 'true',
-            },
-          ],
-          destination: '/:path*',
-        },
-      ],
-      afterFiles: [],
-      fallback: [],
-    }
+    return [
+      {
+        source: '/:path*',
+        destination: '/:path*',
+      },
+    ]
   },
   // Ensure proper handling of static files
   images: {
