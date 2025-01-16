@@ -8,11 +8,38 @@ import { TokenResult } from "../../lib/types";
 const apiKey = process.env.LIVEKIT_API_KEY;
 const apiSecret = process.env.LIVEKIT_API_SECRET;
 
-const createToken = (userInfo: AccessTokenOptions, grant: VideoGrant) => {
-  const at = new AccessToken(apiKey, apiSecret, userInfo);
+const createToken = async (
+  { identity, metadata }: { identity: string; metadata?: string },
+  grant: VideoGrant
+) => {
+  const at = new AccessToken(apiKey, apiSecret, { identity, metadata });
   at.addGrant(grant);
-  return at.toJwt();
+  return await Promise.resolve(at.toJwt());
 };
+
+// Define valid roles
+const validRoles = [
+  'fullstack',
+  'devops',
+  'frontend',
+  'backend',
+  'software',
+  'data',
+  'ml',
+  'cloud',
+  'sysadmin',
+  'qa',
+  'electronics',
+  'electrical',
+  'mechanical',
+  'civil',
+  'product',
+  'project',
+  'uiux',
+  'dba',
+  'security',
+  'network'
+];
 
 export default async function handleToken(
   req: NextApiRequest,
@@ -35,8 +62,8 @@ export default async function handleToken(
     const { role } = req.body;
     
     // Validate role
-    if (!role || !['fullstack', 'devops'].includes(role)) {
-      res.status(400).json({ error: "Invalid or missing role. Must be 'fullstack' or 'devops'" });
+    if (!role || !validRoles.includes(role)) {
+      res.status(400).json({ error: `Invalid or missing role. Must be one of: ${validRoles.join(', ')}` });
       return;
     }
 

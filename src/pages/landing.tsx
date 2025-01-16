@@ -192,6 +192,12 @@ export default function LandingPage() {
 
               localStorage.setItem('validatedFromLanding', 'true');
               localStorage.setItem('validationTimestamp', Date.now().toString());
+              localStorage.setItem('sessionId', sessionId);
+              localStorage.setItem('userInfo', JSON.stringify({
+                registerNumber: studentEmail.split('@')[0],
+                name: studentEmail.split('@')[0],
+                email: studentEmail
+              }));
               setSessionData(sessionInfo);
               const room = getRoomNumber(sessionInfo.role);
               setRoomNumber(room);
