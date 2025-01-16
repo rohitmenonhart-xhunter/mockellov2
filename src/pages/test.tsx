@@ -71,11 +71,34 @@ export function TestInner() {
   useEffect(() => {
     const validatedFromLanding = localStorage.getItem('validatedFromLanding');
     const validationTimestamp = localStorage.getItem('validationTimestamp');
+    const userInfo = localStorage.getItem('userInfo');
+    const sessionId = localStorage.getItem('sessionId');
     const currentTime = Date.now();
     
-    // Check if validation exists and is not older than 5 minutes
-    if (!validatedFromLanding || !validationTimestamp || 
+    // Check if all required data exists and validation is not older than 5 minutes
+    if (!validatedFromLanding || !validationTimestamp || !userInfo || !sessionId ||
         currentTime - parseInt(validationTimestamp) > 5 * 60 * 1000) {
+      // Clear all session data before redirecting
+      localStorage.removeItem('validatedFromLanding');
+      localStorage.removeItem('validationTimestamp');
+      localStorage.removeItem('userInfo');
+      localStorage.removeItem('sessionId');
+      localStorage.removeItem('sessionTimeLeft');
+      localStorage.removeItem('sessionStartTime');
+      localStorage.removeItem('transcriptions');
+      router.push('/landing');
+      return;
+    }
+
+    // Parse and validate userInfo
+    try {
+      const parsedUserInfo = JSON.parse(userInfo);
+      if (!parsedUserInfo.registerNumber || !parsedUserInfo.name || !parsedUserInfo.email) {
+        throw new Error('Invalid user info format');
+      }
+    } catch (error) {
+      console.error('Invalid user info:', error);
+      localStorage.clear(); // Clear all data if userInfo is invalid
       router.push('/landing');
       return;
     }
