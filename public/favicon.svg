@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+  <title>Mockello</title>
+  <circle cx="16" cy="16" r="15" fill="#BE185D"/>
+  <path 
+    d="M16 8L21 13V24H19V15L16 18L13 15V24H11V13L16 8Z" 
+    fill="white"
+    stroke="white"
+    stroke-width="0.5"
+  />
+</svg> 
