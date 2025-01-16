@@ -172,11 +172,21 @@ export function TestInner() {
       return;
     }
 
-    const parsedTranscriptions = JSON.parse(transcriptions);
-    if (!parsedTranscriptions || parsedTranscriptions.length === 0) {
-      console.log("No valid transcriptions to process");
+    let parsedTranscriptions;
+    try {
+      parsedTranscriptions = JSON.parse(transcriptions);
+      if (!parsedTranscriptions || parsedTranscriptions.length === 0) {
+        console.log("No valid transcriptions to process");
+        setToastMessage({
+          message: "No valid interview responses found. Please try again.",
+          type: "error"
+        });
+        return;
+      }
+    } catch (error) {
+      console.error("Error parsing transcriptions:", error);
       setToastMessage({
-        message: "No valid interview responses found. Please try again.",
+        message: "Failed to process interview responses. Please try again.",
         type: "error"
       });
       return;
@@ -193,7 +203,18 @@ export function TestInner() {
         body: JSON.stringify({ transcriptions: parsedTranscriptions }),
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (error) {
+        console.error("Error parsing server response:", error);
+        throw new Error("Failed to parse server response. Please try again.");
+      }
+
       if (!data.summary || data.summary.trim() === '') {
         throw new Error('No valid feedback generated');
       }
@@ -238,7 +259,7 @@ export function TestInner() {
     } catch (error) {
       console.error("Error in feedback generation:", error);
       setToastMessage({
-        message: error instanceof Error ? error.message : "An error occurred. Please contact support.",
+        message: error instanceof Error ? error.message : "An error occurred while generating feedback. Please try again.",
         type: "error"
       });
     } finally {
