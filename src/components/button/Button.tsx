@@ -7,18 +7,24 @@ type ButtonProps = {
   disabled?: boolean;
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
-export const Button: React.FC<ButtonProps> = ({
+export const Button = ({
   accentColor,
   children,
-  className,
+  className = "",
   disabled,
   ...allProps
-}) => {
+}: ButtonProps) => {
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--theme-color', accentColor);
+    document.documentElement.style.setProperty('--theme-hover', `${accentColor}1A`); // 10% opacity
+    document.documentElement.style.setProperty('--theme-border', `${accentColor}33`); // 20% opacity
+    document.documentElement.style.setProperty('--theme-shadow', `${accentColor}4D`); // 30% opacity
+  }, [accentColor]);
+
   return (
     <button
-      className={`flex flex-row ${
-        disabled ? "pointer-events-none" : ""
-      } text-gray-950 text-sm justify-center border border-transparent bg-${accentColor}-500 px-3 py-1 rounded-md transition ease-out duration-250 hover:bg-transparent hover:shadow-${accentColor} hover:border-${accentColor}-500 hover:text-${accentColor}-500 active:scale-[0.98] ${className}`}
+      className={`theme-button px-3 py-1 rounded-md ${className}`}
+      disabled={disabled}
       {...allProps}
     >
       {children}

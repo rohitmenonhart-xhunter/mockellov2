@@ -2,16 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --theme-color: #BE185D;
+  --theme-hover: rgba(190, 24, 93, 0.1);
+  --theme-border: rgba(190, 24, 93, 0.2);
+  --theme-shadow: rgba(190, 24, 93, 0.3);
+}
+
 body {
   background: black;
   --lk-va-bar-gap: 4px;
   --lk-va-bar-width: 4px;
   --lk-va-border-radius: 2px;
+  --lk-theme-color: var(--theme-color);
 }
 
 #__next {
   width: 100%;
   height: 100dvh;
+}
+
+.theme-button {
+  background-color: var(--theme-color);
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.theme-button:hover {
+  background-color: transparent;
+  border-color: var(--theme-color);
+  color: var(--theme-color);
+  box-shadow: 0 0 10px var(--theme-shadow);
+}
+
+.theme-button:disabled {
+  background-color: #6B7280;
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .repeating-square-background {
@@ -35,7 +62,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555; /* Even lighter grey thumb on hover */
+  background: #555;
 }
 
 ::-webkit-scrollbar {

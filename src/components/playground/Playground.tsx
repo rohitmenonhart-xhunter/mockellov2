@@ -496,12 +496,11 @@ export default function Playground({
   useEffect(() => {
     document.body.style.setProperty(
       "--lk-theme-color",
-      // @ts-ignore
-      tailwindTheme.colors[config.settings.theme_color]["500"]
+      config.settings.theme_color
     );
     document.body.style.setProperty(
       "--lk-drop-shadow",
-      `var(--lk-theme-color) 0px 0px 18px`
+      `${config.settings.theme_color} 0px 0px 18px`
     );
   }, [config.settings.theme_color]);
 
@@ -603,7 +602,7 @@ export default function Playground({
               <NameValueRow
                 name="Room"
                 value={name}
-                valueColor={`${config.settings.theme_color}-500`}
+                valueColor={config.settings.theme_color}
               />
               <NameValueRow
                 name="Participant"
@@ -625,8 +624,8 @@ export default function Playground({
               }
               valueColor={
                 roomState === ConnectionState.Connected
-                  ? `${config.settings.theme_color}-500`
-                  : "gray-500"
+                  ? config.settings.theme_color
+                  : "#6B7280"
               }
             />
             <NameValueRow
@@ -642,8 +641,8 @@ export default function Playground({
               }
               valueColor={
                 voiceAssistant.agent
-                  ? `${config.settings.theme_color}-500`
-                  : "gray-500"
+                  ? config.settings.theme_color
+                  : "#6B7280"
               }
             />
           </div>

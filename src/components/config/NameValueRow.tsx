@@ -2,21 +2,15 @@ import { ReactNode } from "react";
 
 type NameValueRowProps = {
   name: string;
-  value?: ReactNode;
+  value: ReactNode;
   valueColor?: string;
 };
 
-export const NameValueRow: React.FC<NameValueRowProps> = ({
-  name,
-  value,
-  valueColor = "gray-300",
-}) => {
+export const NameValueRow = ({ name, value, valueColor }: NameValueRowProps) => {
   return (
-    <div className="flex flex-row w-full items-baseline text-sm">
-      <div className="grow shrink-0 text-gray-500">{name}</div>
-      <div className={`text-xs shrink text-${valueColor} text-right`}>
-        {value}
-      </div>
+    <div className="flex flex-row justify-between items-center">
+      <span className="text-gray-500">{name}</span>
+      <span style={{ color: valueColor }}>{value}</span>
     </div>
   );
 };

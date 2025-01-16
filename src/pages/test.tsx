@@ -298,6 +298,14 @@ export function TestInner() {
     return false;
   }, [wsUrl])
 
+  useEffect(() => {
+    document.documentElement.style.setProperty('--theme-color', config.settings.theme_color);
+    document.documentElement.style.setProperty('--theme-hover', `${config.settings.theme_color}1A`);
+    document.documentElement.style.setProperty('--theme-border', `${config.settings.theme_color}33`);
+    document.documentElement.style.setProperty('--theme-shadow', `${config.settings.theme_color}4D`);
+    document.documentElement.style.setProperty('--lk-theme-color', config.settings.theme_color);
+  }, [config.settings.theme_color]);
+
   return (
     <>
       <Head>
