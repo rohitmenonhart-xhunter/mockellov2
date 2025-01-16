@@ -90,15 +90,21 @@ export function TestInner() {
       return;
     }
 
-    // Parse and validate userInfo
+    let parsedUserInfo;
     try {
-      const parsedUserInfo = JSON.parse(userInfo);
-      if (!parsedUserInfo.registerNumber || !parsedUserInfo.name || !parsedUserInfo.email) {
-        throw new Error('Invalid user info format');
-      }
+      parsedUserInfo = JSON.parse(userInfo);
     } catch (error) {
-      console.error('Invalid user info:', error);
-      localStorage.clear(); // Clear all data if userInfo is invalid
+      console.error('Failed to parse user info:', error);
+      localStorage.clear();
+      router.push('/landing');
+      return;
+    }
+
+    // Validate userInfo structure
+    if (!parsedUserInfo || typeof parsedUserInfo !== 'object' || 
+        !parsedUserInfo.registerNumber || !parsedUserInfo.name || !parsedUserInfo.email) {
+      console.error('Invalid user info structure:', parsedUserInfo);
+      localStorage.clear();
       router.push('/landing');
       return;
     }
