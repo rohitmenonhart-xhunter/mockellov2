@@ -23,7 +23,7 @@ import { ToastProvider, useToast } from "@/components/toast/ToasterProvider";
 import { logout } from "@/utils/auth";
 
 const themeColors = [
-  "pink",
+  "#BE185D"
 ];
 
 const inter = Inter({ subsets: ["latin"] });
