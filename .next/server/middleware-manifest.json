@@ -1,6 +1,27 @@
 {
-  "version": 3,
+  "sortedMiddleware": [],
   "middleware": {},
-  "functions": {},
-  "sortedMiddleware": []
+  "functions": {
+    "/api/summarize": {
+      "files": [
+        "prerender-manifest.js",
+        "server/edge-runtime-webpack.js",
+        "server/pages/api/summarize.js"
+      ],
+      "name": "pages/api/summarize",
+      "page": "/api/summarize",
+      "matchers": [
+        {
+          "regexp": "^/api/summarize$",
+          "originalSource": "/api/summarize"
+        }
+      ],
+      "wasm": [],
+      "assets": [],
+      "regions": [
+        "iad1"
+      ]
+    }
+  },
+  "version": 2
 }
