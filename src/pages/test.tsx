@@ -207,21 +207,48 @@ export function TestInner() {
         throw new Error(`Server error: ${response.status} ${response.statusText}`);
       }
 
-      let data;
-      try {
-        data = await response.json();
-      } catch (error) {
-        console.error("Error parsing server response:", error);
-        throw new Error("Failed to parse server response. Please try again.");
+      if (!response.body) {
+        throw new Error('No response body received');
       }
 
-      if (!data.summary || data.summary.trim() === '') {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let summary = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n').filter(Boolean);
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            
+            if (data.type === 'error') {
+              throw new Error(data.error || 'Unknown error occurred');
+            }
+            
+            if (data.type === 'chunk') {
+              summary += data.content;
+              // Update UI with partial summary if needed
+            } else if (data.type === 'complete') {
+              summary = data.summary;
+            }
+          } catch (e) {
+            console.error('Error parsing stream chunk:', e);
+          }
+        }
+      }
+
+      if (!summary || summary.trim() === '') {
         throw new Error('No valid feedback generated');
       }
 
       const parsedUserInfo = JSON.parse(userInfo);
       const performancePercentage = calculatePerformancePercentage(
-        data.summary,
+        summary,
         parsedTranscriptions.length,
         parsedTranscriptions.reduce((acc: number, curr: any) => 
           acc + (curr.message ? curr.message.split(' ').length : 0), 0)
@@ -231,9 +258,9 @@ export function TestInner() {
         sessionId: sessionId,
         registerNumber: parsedUserInfo.registerNumber,
         name: parsedUserInfo.name,
-        feedback: data.summary,
+        feedback: summary,
         timestamp: new Date().toISOString(),
-        stars: data.summary.match(/★+½?(?=☆|$)/)?.[0]?.length || 0,
+        stars: summary.match(/★+½?(?=☆|$)/)?.[0]?.length || 0,
         performancePercentage: performancePercentage,
         interviewDate: new Date().toLocaleDateString(),
         interviewTime: new Date().toLocaleTimeString(),

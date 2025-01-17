@@ -1,9 +1,9 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
 
-// Configure longer timeout
 export const config = {
-  maxDuration: 60, // Extend timeout to 60 seconds
+  runtime: 'edge',
+  regions: ['iad1'], // US East (N. Virginia)
 };
 
 const openai = new OpenAI({
@@ -26,38 +26,53 @@ async function retryOpenAICall(fn: () => Promise<any>, retries = MAX_RETRIES, de
   }
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  console.log("API endpoint called with method:", req.method);
-  
+export default async function handler(req: NextRequest) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
+    return new Response(
+      JSON.stringify({ message: 'Method not allowed' }),
+      { 
+        status: 405,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 
   try {
-    const { transcriptions, dressCode, responseTimes } = req.body;
-    console.log("Received transcriptions:", transcriptions);
-    console.log("Received dress code info:", dressCode);
-    console.log("Received response times:", responseTimes);
+    const body = await req.json();
+    const { transcriptions, dressCode, responseTimes } = body;
 
     if (!transcriptions || !Array.isArray(transcriptions)) {
-      console.error("Invalid transcriptions data received");
-      return res.status(400).json({ message: 'Invalid transcriptions data' });
+      return new Response(
+        JSON.stringify({ message: 'Invalid transcriptions data' }),
+        { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
     }
 
-    // Format transcriptions for GPT-4
-    const transcriptText = transcriptions
-      .map((t: any) => `${t.name}: ${t.message}`)
-      .join('\n');
-    
-    // Calculate response time metrics
-    let responseTimeAnalysis = "";
-    if (responseTimes && responseTimes.length > 0) {
-      const times = responseTimes.map((rt: { responseTime: number }) => rt.responseTime);
-      const avgTime = times.reduce((a: number, b: number) => a + b, 0) / times.length;
-      const maxTime = Math.max(...times);
-      const minTime = Math.min(...times);
-      
-      responseTimeAnalysis = `
+    // Create a TransformStream for streaming the response
+    const stream = new TransformStream();
+    const writer = stream.writable.getWriter();
+    const encoder = new TextEncoder();
+
+    // Start processing in the background
+    (async () => {
+      try {
+        // Format transcriptions for GPT-4
+        const transcriptText = transcriptions
+          .map((t: any) => `${t.name}: ${t.message}`)
+          .join('\n');
+        
+        // Calculate response time metrics
+        let responseTimeAnalysis = "";
+        if (responseTimes && responseTimes.length > 0) {
+          const times = responseTimes.map((rt: { responseTime: number }) => rt.responseTime);
+          const avgTime = times.reduce((a: number, b: number) => a + b, 0) / times.length;
+          const maxTime = Math.max(...times);
+          const minTime = Math.min(...times);
+          
+          responseTimeAnalysis = `
 Response Time Analysis:
 - Average response time: ${avgTime.toFixed(2)} seconds
 - Longest response time: ${maxTime.toFixed(2)} seconds
@@ -69,10 +84,13 @@ ${responseTimes.map((rt: { aiMessage: string, responseTime: number }) =>
   `- After AI said: "${rt.aiMessage.substring(0, 50)}..."
   User took: ${rt.responseTime.toFixed(2)} seconds to respond`).join('\n')}
 `;
-    }
+        }
 
-    // Optimize prompt to reduce tokens
-    const prompt = `Interview Transcript Analysis Request:
+        // Send processing status
+        await writer.write(encoder.encode(JSON.stringify({ status: 'processing' }) + '\n'));
+
+        // Optimize prompt to reduce tokens
+        const prompt = `Interview Transcript Analysis Request:
 
 Transcript:
 ${transcriptText}
@@ -95,34 +113,72 @@ Format the response with:
 
 Keep the response under 1000 words.`;
 
-    const completion = await retryOpenAICall(() => 
-      openai.chat.completions.create({
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert HR interview evaluator. Provide detailed, constructive feedback with specific examples and clear improvement suggestions. Pay special attention to professional presentation and dress code compliance."
-          },
-          {
-            role: "user",
-            content: prompt
+        const completion = await retryOpenAICall(() => 
+          openai.chat.completions.create({
+            messages: [
+              {
+                role: "system",
+                content: "You are an expert HR interview evaluator. Provide detailed, constructive feedback with specific examples and clear improvement suggestions. Pay special attention to professional presentation and dress code compliance."
+              },
+              {
+                role: "user",
+                content: prompt
+              }
+            ],
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 2000,
+            stream: true
+          })
+        );
+
+        let summary = '';
+        for await (const chunk of completion) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          summary += content;
+          // Send chunks as they arrive
+          if (content) {
+            await writer.write(encoder.encode(JSON.stringify({ 
+              type: 'chunk',
+              content 
+            }) + '\n'));
           }
-        ],
-        model: "gpt-4",
-        temperature: 0.7,
-        max_tokens: 2000 // Reduced from 4000 to optimize response time
-      })
-    );
+        }
 
-    const summary = completion.choices[0].message.content;
-    console.log("Received summary from OpenAI:", summary);
+        // Send final complete summary
+        await writer.write(encoder.encode(JSON.stringify({ 
+          type: 'complete',
+          summary 
+        }) + '\n'));
+      } catch (error: any) {
+        await writer.write(encoder.encode(JSON.stringify({ 
+          type: 'error',
+          message: 'Error generating summary',
+          error: error.message
+        }) + '\n'));
+      } finally {
+        await writer.close();
+      }
+    })();
 
-    return res.status(200).json({ summary });
-  } catch (error: any) {
-    console.error('Error in summarize API:', error);
-    return res.status(500).json({ 
-      message: 'Error generating summary', 
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    // Return the stream immediately
+    return new Response(stream.readable, {
+      headers: { 
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      }
     });
+  } catch (error: any) {
+    return new Response(
+      JSON.stringify({ 
+        message: 'Error generating summary', 
+        error: error.message,
+      }),
+      { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
 } 

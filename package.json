@@ -10,8 +10,6 @@
   },
   "dependencies": {
     "@livekit/components-react": "^2.7.0",
-    "@netlify/functions": "^2.6.0",
-    "@netlify/plugin-nextjs": "^4.41.3",
     "firebase": "^10.8.0",
     "framer-motion": "^11.0.5",
     "livekit-client": "^2.8.0",
