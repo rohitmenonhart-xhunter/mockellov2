@@ -200,9 +200,10 @@ export function TestInner() {
     try {
       setIsGeneratingSummary(true);
       
-      const apiUrl = window.location.protocol === 'https:' 
-        ? '/api/summarize'
-        : `${window.location.protocol}//${window.location.hostname}:${window.location.port}/api/summarize`;
+      // Determine the API URL based on environment
+      const apiUrl = process.env.NODE_ENV === 'development'
+        ? `http://localhost:${window.location.port}/api/summarize`
+        : '/api/summarize';
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -211,7 +212,7 @@ export function TestInner() {
         },
         body: JSON.stringify({ 
           transcriptions: parsedTranscriptions,
-          isHREvaluation: true // Flag to indicate this is for HR evaluation
+          isHREvaluation: true
         }),
       });
 
