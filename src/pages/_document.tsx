@@ -7,13 +7,27 @@ export default function Document() {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         
-        {/* Favicon */}
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link rel="alternate icon" href="/favicon.ico" />
-        <link rel="apple-touch-icon" href="/favicon.svg" />
+        {/* Standard favicon */}
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+        
+        {/* Modern browsers */}
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+        
+        {/* Apple Touch Icon */}
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        
+        {/* Web App Manifest */}
+        <link rel="manifest" href="/site.webmanifest" />
+        
+        {/* Microsoft Tiles */}
+        <meta name="msapplication-TileColor" content="#BE185D" />
+        <meta name="msapplication-config" content="/browserconfig.xml" />
+        
+        {/* Theme Color */}
+        <meta name="theme-color" content="#BE185D" />
         
         {/* PWA */}
-        <meta name="theme-color" content="#BE185D" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black" />
         
