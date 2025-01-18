@@ -99,26 +99,42 @@ ${responseTimeAnalysis}
 
 ${dressCode ? `Dress Code Assessment: ${dressCode.note}` : ''}
 
-Please provide a concise evaluation focusing on:
-1. Communication skills and clarity
-2. Response quality and relevance
-3. Professional demeanor
-4. Overall performance
+You are conducting an HR evaluation of this candidate. Provide a detailed assessment focusing on:
 
-Format the response with:
-- A 1-5 star rating (★) with half stars (½) allowed
-- Key strengths
-- Areas for improvement
-- Final recommendation
+1. Technical Competency
+- Understanding of concepts
+- Problem-solving approach
+- Technical communication skills
 
-Keep the response under 1000 words.`;
+2. Professional Conduct
+- Communication clarity
+- Response timing and engagement
+- Professional demeanor
+
+3. Interview Performance
+- Confidence level
+- Articulation of ideas
+- Handling of difficult questions
+
+4. Overall Evaluation
+- Strengths demonstrated
+- Areas of concern
+- Hiring potential
+
+Format your response as:
+1. Start with a 1-5 star rating (★) with half stars (½) allowed
+2. Provide a detailed evaluation in each category above
+3. Include specific examples from the interview
+4. End with a clear hiring recommendation (Strongly Recommend / Recommend with Reservations / Do Not Recommend)
+
+Keep the evaluation objective and focused on hiring decision-making. Do not include improvement suggestions or feedback for the candidate.`;
 
         const completion = await retryOpenAICall(() => 
           openai.chat.completions.create({
             messages: [
               {
                 role: "system",
-                content: "You are an expert HR interview evaluator. Provide detailed, constructive feedback with specific examples and clear improvement suggestions. Pay special attention to professional presentation and dress code compliance."
+                content: "You are a senior HR evaluator assessing candidates for technical positions. Provide objective, detailed assessments focused on hiring decisions. Be critical and thorough in your evaluation."
               },
               {
                 role: "user",

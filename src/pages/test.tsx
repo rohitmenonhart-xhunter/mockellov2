@@ -41,21 +41,26 @@ export default function Test() {
 }
 
 const calculatePerformancePercentage = (summary: string, transcriptionCount: number, totalWords: number): number => {
-  // Base score from star rating
+  // Base score from star rating - make it harder to get high scores
   const stars = summary.match(/★+½?(?=☆|$)/)?.[0] || '';
   const fullStars = (stars.match(/★/g) || []).length;
   const hasHalf = stars.includes('½');
   const starScore = ((fullStars + (hasHalf ? 0.5 : 0)) / 5) * 100;
 
-  // Participation score based on transcription data
-  const participationScore = Math.min(100, (transcriptionCount * 10)); // 10 points per response, max 100
-  const wordScore = Math.min(100, (totalWords / 5)); // 1 point per 5 words, max 100
+  // Stricter participation score
+  const participationScore = Math.min(85, (transcriptionCount * 5)); // 5 points per response, max 85
 
-  // Weight the scores: 60% star rating, 20% participation, 20% word count
-  const weightedScore = (starScore * 0.6) + (participationScore * 0.2) + (wordScore * 0.2);
+  // Stricter word score - require more words for points
+  const wordScore = Math.min(80, (totalWords / 10)); // 1 point per 10 words, max 80
+
+  // Weight the scores with higher emphasis on star rating
+  const weightedScore = (starScore * 0.7) + (participationScore * 0.15) + (wordScore * 0.15);
   
-  // Return rounded percentage
-  return Math.round(weightedScore);
+  // Apply a curve to make high scores harder to achieve
+  const curvedScore = Math.pow(weightedScore / 100, 1.2) * 100;
+  
+  // Return rounded percentage, capped at 95%
+  return Math.min(95, Math.round(curvedScore));
 };
 
 export function TestInner() {
@@ -195,12 +200,19 @@ export function TestInner() {
     try {
       setIsGeneratingSummary(true);
       
-      const response = await fetch('/api/summarize', {
+      const apiUrl = window.location.protocol === 'https:' 
+        ? '/api/summarize'
+        : `${window.location.protocol}//${window.location.hostname}:${window.location.port}/api/summarize`;
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ transcriptions: parsedTranscriptions }),
+        body: JSON.stringify({ 
+          transcriptions: parsedTranscriptions,
+          isHREvaluation: true // Flag to indicate this is for HR evaluation
+        }),
       });
 
       if (!response.ok) {
