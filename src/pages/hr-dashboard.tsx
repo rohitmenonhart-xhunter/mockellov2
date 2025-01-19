@@ -1144,19 +1144,29 @@ ${profile?.company}`
             <div className="flex justify-end">
               <button
                 onClick={() => {
+                  // Get all selected candidates' emails
                   const selectedEmails = Array.from(selectedCandidates[session.id] || new Set())
                     .map(item => {
+                      // If the item is already an email, return it
                       if (item.includes('@')) return item;
+                      // Otherwise, find the feedback object to get the email
                       const feedback = feedbacks.find(f => f.registerNumber === item);
                       return feedback?.email;
                     })
-                    .filter(Boolean)
+                    .filter(Boolean) // Remove any undefined values
                     .join(',');
 
+                  // Get selected students' names and register numbers
                   const selectedStudents = feedbacks
                     .filter(f => selectedCandidates[session.id]?.has(f.registerNumber))
                     .map(f => `${f.name} (${f.registerNumber})`)
                     .join('\n');
+
+                  // If no emails found, show error
+                  if (!selectedEmails) {
+                    alert('No valid email addresses found for selected candidates');
+                    return;
+                  }
 
                   const subject = encodeURIComponent(`Next Round Interview Details - ${profile?.company}`);
                   const body = encodeURIComponent(
@@ -1182,7 +1192,12 @@ Best regards,
 ${profile?.name}
 ${profile?.company}
 `);
-                  window.location.href = `mailto:${selectedEmails}?subject=${subject}&body=${body}`;
+                  // Create and trigger the mailto link
+                  const mailtoLink = document.createElement('a');
+                  mailtoLink.href = `mailto:${selectedEmails}?subject=${subject}&body=${body}`;
+                  document.body.appendChild(mailtoLink);
+                  mailtoLink.click();
+                  document.body.removeChild(mailtoLink);
                 }}
                 className="px-6 py-3 bg-[#BE185D] text-white rounded-lg hover:bg-[#BE185D]/80 transition-colors whitespace-nowrap"
               >
@@ -1240,7 +1255,41 @@ ${profile?.company}
     <>
       <Head>
         <title>HR Dashboard - Mockello</title>
-        <meta name="description" content="Manage your recruitment process with Mockello" />
+        <meta name="description" content="Transform your hiring process with Mockello - The most advanced AI-powered candidate evaluation platform that saves time and costs in recruitment." />
+        
+        {/* Standard Favicon */}
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+        
+        {/* Apple Touch Icons */}
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+        
+        {/* Web Manifest */}
+        <link rel="manifest" href="/site.webmanifest" />
+        
+        {/* Microsoft Tiles */}
+        <meta name="msapplication-TileColor" content="#BE185D" />
+        <meta name="msapplication-config" content="/browserconfig.xml" />
+        
+        {/* Safari Pinned Tab */}
+        <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#BE185D" />
+        
+        {/* Theme Color */}
+        <meta name="theme-color" content="#BE185D" />
+        
+        {/* Open Graph / Social Media */}
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="HR Dashboard - Mockello" />
+        <meta property="og:description" content="Transform your hiring process with Mockello - The most advanced AI-powered candidate evaluation platform that saves time and costs in recruitment." />
+        <meta property="og:image" content="/og-image.png" />
+        <meta property="og:url" content="https://mockello.com" />
+        
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="HR Dashboard - Mockello" />
+        <meta name="twitter:description" content="Transform your hiring process with Mockello - The most advanced AI-powered candidate evaluation platform." />
+        <meta name="twitter:image" content="/twitter-card.png" />
       </Head>
 
       <main className="bg-black min-h-screen text-white">
