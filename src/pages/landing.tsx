@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { Inter } from 'next/font/google';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, get, query, orderByChild, equalTo, set } from 'firebase/database';
 import Image from 'next/image';
@@ -93,9 +93,17 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [isValidated, setIsValidated] = useState(false);
   const [sessionData, setSessionData] = useState<SessionInfo | null>(null);
-  const [timeLeft, setTimeLeft] = useState(180); // 3 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(180);
   const [showStartButton, setShowStartButton] = useState(false);
-  const [roomNumber, setRoomNumber] = useState<string>('');
+  
+  // Media check states
+  const [isCameraAvailable, setIsCameraAvailable] = useState(false);
+  const [isMicAvailable, setIsMicAvailable] = useState(false);
+  const [isTestingMedia, setIsTestingMedia] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [mediaError, setMediaError] = useState('');
+  const [volume, setVolume] = useState(0);
+  const [isCheckingAudio, setIsCheckingAudio] = useState(false);
 
   // Effect for countdown timer
   useEffect(() => {
@@ -121,6 +129,91 @@ export default function LandingPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Function to check camera
+  const checkCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setIsCameraAvailable(true);
+      return stream;
+    } catch (error) {
+      console.error('Camera error:', error);
+      setMediaError('Camera access denied. Please enable camera access and try again.');
+      setIsCameraAvailable(false);
+      return null;
+    }
+  };
+
+  // Function to check microphone
+  const checkMicrophone = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setIsMicAvailable(true);
+      
+      // Create audio analyzer
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(stream);
+      microphone.connect(analyser);
+      analyser.fftSize = 256;
+      
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      setIsCheckingAudio(true);
+      
+      // Monitor audio levels
+      const checkAudioLevel = () => {
+        if (!isCheckingAudio) return;
+        
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        setVolume(average);
+        
+        requestAnimationFrame(checkAudioLevel);
+      };
+      
+      checkAudioLevel();
+      return stream;
+    } catch (error) {
+      console.error('Microphone error:', error);
+      setMediaError('Microphone access denied. Please enable microphone access and try again.');
+      setIsMicAvailable(false);
+      return null;
+    }
+  };
+
+  // Function to test media devices
+  const testMediaDevices = async () => {
+    setIsTestingMedia(true);
+    setMediaError('');
+    
+    const cameraStream = await checkCamera();
+    const micStream = await checkMicrophone();
+    
+    // Clean up function
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+      if (micStream) {
+        micStream.getTracks().forEach(track => track.stop());
+      }
+      setIsCheckingAudio(false);
+    };
+  };
+
+  // Clean up media streams when component unmounts
+  useEffect(() => {
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
   const validateSessionId = async () => {
     if (!sessionId.trim()) {
       setError('Please enter your session ID');
@@ -136,80 +229,135 @@ export default function LandingPage() {
     setError('');
 
     try {
-      const sessionRef = ref(database, 'keys/variable/sessionid');
-      const snapshot = await get(sessionRef);
+      console.log('Checking session ID:', sessionId);
       
-      if (snapshot.exists()) {
-        let found = false;
-        let sessionInfo: SessionInfo = {
-          sessionId: '',
-          role: '',
-          studentLimit: 0,
-          currentStudents: 0
-        };
+      // First check in sessions
+      const sessionRef = ref(database, `sessions/${sessionId}`);
+      let snapshot = await get(sessionRef);
+      
+      // If not found in sessions, check in keys/variable/sessionid
+      if (!snapshot.exists()) {
+        console.log('Not found in sessions, checking keys/variable/sessionid');
+        const keySessionRef = ref(database, 'keys/variable/sessionid');
+        const keySnapshot = await get(keySessionRef);
         
-        snapshot.forEach((childSnapshot) => {
-          const data = childSnapshot.val();
-          if (data && typeof data === 'object' && 'sessionId' in data && 'role' in data) {
-            sessionInfo = {
-              sessionId: data.sessionId as string,
-              role: data.role as string,
-              createdAt: data.createdAt as string,
-              hrName: data.hrName as string,
-              company: data.company as string,
-              studentLimit: data.studentLimit as number,
-              currentStudents: data.currentStudents as number || 0,
-              invitedEmails: data.invitedEmails as string[] || []
-            };
-            
-            if (sessionInfo.sessionId === sessionId) {
+        if (keySnapshot.exists()) {
+          // Search through all sessions in the key location
+          let found = false;
+          keySnapshot.forEach((childSnapshot) => {
+            const sessionData = childSnapshot.val();
+            if (sessionData.sessionId === sessionId) {
+              snapshot = childSnapshot;
               found = true;
-
-              // Check if email is in invited list
-              if (!sessionInfo.invitedEmails?.includes(studentEmail)) {
-                setError('Your email is not authorized for this session. Please use the email where you received the invitation.');
-                setLoading(false);
-                return;
-              }
-
-              // Check if session is full
-              const currentStudents = sessionInfo.currentStudents || 0;
-              if (sessionInfo.studentLimit !== -1 && currentStudents >= sessionInfo.studentLimit) {
-                setError('This session is full. Please contact the HR representative for assistance.');
-                setLoading(false);
-                return;
-              }
-
-              // Update current students count and remove the validated email
-              const sessionNodeRef = childSnapshot.ref;
-              const updatedEmails = (sessionInfo.invitedEmails || []).filter(email => email !== studentEmail);
-              
-              set(sessionNodeRef, {
-                ...data,
-                currentStudents: currentStudents + 1,
-                invitedEmails: updatedEmails
-              });
-
-              localStorage.setItem('validatedFromLanding', 'true');
-              localStorage.setItem('validationTimestamp', Date.now().toString());
-              localStorage.setItem('sessionId', sessionId);
-              localStorage.setItem('userInfo', JSON.stringify({
-                registerNumber: studentEmail.split('@')[0],
-                name: studentEmail.split('@')[0],
-                email: studentEmail
-              }));
-              setSessionData(sessionInfo);
-              const room = getRoomNumber(sessionInfo.role);
-              setRoomNumber(room);
-              setIsValidated(true);
             }
+          });
+          
+          if (!found) {
+            console.log('Session not found in either location');
+            setError('Invalid session ID. Please check and try again.');
+            setLoading(false);
+            return;
           }
-        });
-
-        if (!found) {
+        } else {
+          console.log('Session not found in either location');
           setError('Invalid session ID. Please check and try again.');
+          setLoading(false);
+          return;
         }
       }
+
+      const data = snapshot.val();
+      console.log('Session data:', data);
+      console.log('InvitedEmails:', data.invitedEmails);
+      console.log('Student email:', studentEmail);
+      
+      // Check if invitedEmails exists and is an array
+      if (!data.invitedEmails || !Array.isArray(data.invitedEmails)) {
+        console.log('No invitedEmails array found');
+        setError('Session configuration error. Please contact support.');
+        setLoading(false);
+        return;
+      }
+
+      // Check if email is in invited list
+      const isEmailInvited = data.invitedEmails.some(
+        (email: string) => email.toLowerCase() === studentEmail.toLowerCase()
+      );
+      console.log('Is email invited:', isEmailInvited);
+
+      if (!isEmailInvited) {
+        setError('Your email is not authorized for this session. Please use the email where you received the invitation.');
+        setLoading(false);
+        return;
+      }
+
+      // Check if session is full
+      const currentStudents = data.currentStudents || 0;
+      console.log('Current students:', currentStudents, 'Limit:', data.studentLimit);
+      if (data.studentLimit !== -1 && currentStudents >= data.studentLimit) {
+        setError('This session is full. Please contact the HR representative for assistance.');
+        setLoading(false);
+        return;
+      }
+
+      // Update current students count and remove the validated email
+      const updatedEmails = data.invitedEmails.filter(
+        (email: string) => email.toLowerCase() !== studentEmail.toLowerCase()
+      );
+      
+      // Always update in both locations to ensure consistency
+      const sessionData = {
+        ...data,
+        currentStudents: currentStudents + 1,
+        invitedEmails: updatedEmails
+      };
+
+      // Update in sessions location
+      await set(ref(database, `sessions/${sessionId}`), sessionData);
+      
+      // If found in keys location, update there too
+      if (snapshot.ref.toString().includes('keys/variable/sessionid')) {
+        await set(snapshot.ref, sessionData);
+      }
+
+      // Store session info in localStorage
+      localStorage.setItem('validatedFromLanding', 'true');
+      localStorage.setItem('validationTimestamp', Date.now().toString());
+      localStorage.setItem('sessionId', sessionId);
+      localStorage.setItem('userInfo', JSON.stringify({
+        registerNumber: studentEmail.split('@')[0],
+        name: studentEmail.split('@')[0],
+        email: studentEmail
+      }));
+
+      // Extract role from roleplayPrompt
+      let role = '';
+      if (data.roleplayPrompt) {
+        const promptText = data.roleplayPrompt;
+        const roleMatch = promptText.match(/interviewing for the role of ([^We]*)/);
+        if (roleMatch && roleMatch[1]) {
+          role = roleMatch[1].trim();
+        }
+      } else if (data.role) {
+        // Fallback to role field if roleplayPrompt doesn't exist
+        role = data.role;
+      }
+      console.log('Extracted role:', role);
+
+      const sessionInfo: SessionInfo = {
+        sessionId: sessionId,
+        role: role,
+        createdAt: data.createdAt,
+        hrName: data.hrName,
+        company: data.hrCompany || data.company,
+        studentLimit: data.studentLimit,
+        currentStudents: currentStudents + 1,
+        invitedEmails: updatedEmails
+      };
+
+      setSessionData(sessionInfo);
+      const room = getRoomNumber(role);
+      setIsValidated(true);
     } catch (error) {
       console.error('Error validating session:', error);
       setError('An error occurred while validating the session ID.');
@@ -319,18 +467,59 @@ export default function LandingPage() {
               Waiting Room
             </h1>
             <motion.p variants={fadeInUp} className="text-xl text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed">
-              Please use this time to review the instructions and prepare for your interview.
+              Please check your camera and microphone before starting the interview.
             </motion.p>
 
-            {/* Room Number Display */}
+            {/* Media Check Section */}
             <motion.div
               variants={fadeInUp}
               className="mb-8 p-6 bg-[#BE185D]/10 rounded-xl border border-[#BE185D]/30"
             >
-              <h2 className="text-2xl font-bold text-[#BE185D] mb-2">Your Room Information</h2>
-              <p className="text-lg text-gray-300">Role: {sessionData?.role}</p>
-              <p className="text-3xl font-mono font-bold text-[#BE185D] mt-2">Room #{roomNumber}</p>
-              <p className="text-sm text-gray-400 mt-2">⚠️ Please remember your room number as it will be required in the next step</p>
+              <h2 className="text-2xl font-bold text-[#BE185D] mb-4">Device Check</h2>
+              
+              {/* Camera Preview */}
+              <div className="mb-6">
+                <h3 className="text-lg text-white mb-2">Camera</h3>
+                <div className="relative w-full max-w-[320px] mx-auto aspect-video bg-black/50 rounded-lg overflow-hidden">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                  {!isCameraAvailable && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+                      <p className="text-gray-400">Camera not available</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Microphone Level */}
+              <div className="mb-6">
+                <h3 className="text-lg text-white mb-2">Microphone</h3>
+                <div className="w-full max-w-[320px] mx-auto h-8 bg-black/50 rounded-lg overflow-hidden">
+                  <div 
+                    className="h-full bg-[#BE185D] transition-all duration-100"
+                    style={{ width: `${(volume / 255) * 100}%` }}
+                  />
+                </div>
+                {!isMicAvailable && (
+                  <p className="text-gray-400 mt-2">Microphone not available</p>
+                )}
+              </div>
+
+              {mediaError && (
+                <p className="text-red-500 text-sm mb-4">{mediaError}</p>
+              )}
+
+              <button
+                onClick={testMediaDevices}
+                className="px-6 py-3 bg-[#BE185D]/20 text-[#BE185D] rounded-lg hover:bg-[#BE185D]/30 transition-colors"
+              >
+                {isTestingMedia ? 'Testing Devices...' : 'Test Camera & Microphone'}
+              </button>
             </motion.div>
 
             {/* Timer */}
@@ -354,13 +543,13 @@ export default function LandingPage() {
                   <span className="mr-2">✓</span> Ensure you're in a quiet environment
                 </li>
                 <li className="flex items-center">
-                  <span className="mr-2">✓</span> Check your camera and microphone
+                  <span className="mr-2">✓</span> Test your camera and microphone
                 </li>
                 <li className="flex items-center">
                   <span className="mr-2">✓</span> Have your resume ready for reference
                 </li>
                 <li className="flex items-center">
-                  <span className="mr-2">✓</span> Remember your Room Number: #{roomNumber}
+                  <span className="mr-2">✓</span> Use Chrome or Firefox browser
                 </li>
                 <li className="flex items-center">
                   <span className="mr-2">✓</span> The interview will take approximately 15 minutes
@@ -377,9 +566,12 @@ export default function LandingPage() {
               >
                 <button
                   onClick={() => router.push('/test')}
-                  className="px-8 py-4 bg-gradient-to-r from-[#BE185D] to-[#BE185D]/80 text-white rounded-full text-lg font-semibold shadow-lg hover:shadow-[0_0_30px_-5px_#BE185D] transition-all duration-300"
+                  disabled={!isCameraAvailable || !isMicAvailable}
+                  className="px-8 py-4 bg-gradient-to-r from-[#BE185D] to-[#BE185D]/80 text-white rounded-full text-lg font-semibold shadow-lg hover:shadow-[0_0_30px_-5px_#BE185D] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Start Your Interview
+                  {!isCameraAvailable || !isMicAvailable ? 
+                    'Please check your camera and microphone' : 
+                    'Start Your Interview'}
                 </button>
               </motion.div>
             )}
@@ -395,10 +587,12 @@ export default function LandingPage() {
               <div>
                 <p className="text-gray-300 mb-2">• Speak clearly and naturally</p>
                 <p className="text-gray-300 mb-2">• Take your time to think before answering</p>
+                <p className="text-gray-300 mb-2">• Maintain good eye contact with the camera</p>
               </div>
               <div>
                 <p className="text-gray-300 mb-2">• Be honest in your responses</p>
                 <p className="text-gray-300 mb-2">• Stay focused throughout the session</p>
+                <p className="text-gray-300 mb-2">• Ensure good lighting on your face</p>
               </div>
             </div>
           </motion.div>

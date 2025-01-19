@@ -17,30 +17,6 @@ const createToken = async (
   return await Promise.resolve(at.toJwt());
 };
 
-// Define valid roles
-const validRoles = [
-  'fullstack',
-  'devops',
-  'frontend',
-  'backend',
-  'software',
-  'data',
-  'ml',
-  'cloud',
-  'sysadmin',
-  'qa',
-  'electronics',
-  'electrical',
-  'mechanical',
-  'civil',
-  'product',
-  'project',
-  'uiux',
-  'dba',
-  'security',
-  'network'
-];
-
 export default async function handleToken(
   req: NextApiRequest,
   res: NextApiResponse
@@ -58,20 +34,18 @@ export default async function handleToken(
       return;
     }
 
-    // Get role from request body
-    const { role } = req.body;
+    // Get session ID from request body
+    const { sessionId, metadata } = req.body;
     
-    // Validate role
-    if (!role || !validRoles.includes(role)) {
-      res.status(400).json({ error: `Invalid or missing role. Must be one of: ${validRoles.join(', ')}` });
+    // Validate session ID
+    if (!sessionId) {
+      res.status(400).json({ error: 'Session ID is required' });
       return;
     }
 
-    const roomName = `room-${generateRandomAlphanumeric(4)}-${generateRandomAlphanumeric(4)}`;
+    // Use session ID as room name to ensure all participants join the same room
+    const roomName = `session-${sessionId}`;
     const identity = `identity-${generateRandomAlphanumeric(4)}`;
-
-    // Add metadata with role information
-    const metadata = JSON.stringify({ role });
 
     const grant: VideoGrant = {
       room: roomName,
@@ -88,7 +62,7 @@ export default async function handleToken(
     };
 
     // Log successful token generation (remove in production)
-    console.log('Token generated for role:', role);
+    console.log('Token generated for session:', sessionId);
 
     res.status(200).json(result);
   } catch (e) {

@@ -39,21 +39,14 @@ export const ConnectionProvider = ({
       let token = "";
       let url = "";
 
-      // Get the selected role from localStorage
-      const selectedRole = localStorage.getItem('interviewRole');
+      // Get the session ID from localStorage
+      const sessionId = localStorage.getItem('interviewSessionId');
       
-      // Validate role before proceeding
-      const validRoles = [
-        'fullstack', 'devops', 'frontend', 'backend', 'software',
-        'data', 'ml', 'cloud', 'sysadmin', 'qa', 'electronics',
-        'electrical', 'mechanical', 'civil', 'product', 'project',
-        'uiux', 'dba', 'security', 'network'
-      ];
-      
-      if (!selectedRole || !validRoles.includes(selectedRole)) {
+      // Validate session ID before proceeding
+      if (!sessionId) {
         setToastMessage({
           type: "error",
-          message: "Please select a valid room before connecting.",
+          message: "Please enter a valid session ID before connecting.",
         });
         return;
       }
@@ -81,7 +74,10 @@ export const ConnectionProvider = ({
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ role: selectedRole }),
+            body: JSON.stringify({ 
+              sessionId: sessionId,
+              metadata: JSON.stringify({ sessionId }) // Pass session ID as metadata
+            }),
           });
 
           if (!response.ok) {

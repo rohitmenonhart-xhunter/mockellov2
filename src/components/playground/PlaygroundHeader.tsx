@@ -16,29 +16,6 @@ type PlaygroundHeader = {
   timeLeft?: number;
 };
 
-const roles = [
-  { id: 'fullstack', label: 'Room 001' },
-  { id: 'devops', label: 'Room 002' },
-  { id: 'frontend', label: 'Room 003' },
-  { id: 'backend', label: 'Room 004' },
-  { id: 'software', label: 'Room 005' },
-  { id: 'data', label: 'Room 006' },
-  { id: 'ml', label: 'Room 007' },
-  { id: 'cloud', label: 'Room 008' },
-  { id: 'sysadmin', label: 'Room 009' },
-  { id: 'qa', label: 'Room 010' },
-  { id: 'electronics', label: 'Room 011' },
-  { id: 'electrical', label: 'Room 012' },
-  { id: 'mechanical', label: 'Room 013' },
-  { id: 'civil', label: 'Room 014' },
-  { id: 'product', label: 'Room 015' },
-  { id: 'project', label: 'Room 016' },
-  { id: 'uiux', label: 'Room 017' },
-  { id: 'dba', label: 'Room 018' },
-  { id: 'security', label: 'Room 019' },
-  { id: 'network', label: 'Room 020' }
-];
-
 export const PlaygroundHeader = ({
   logo,
   title,
@@ -50,7 +27,7 @@ export const PlaygroundHeader = ({
   timeLeft = 0,
 }: PlaygroundHeader) => {
   const { config } = useConfig();
-  const [selectedRole, setSelectedRole] = useState('');
+  const [sessionId, setSessionId] = useState('');
   const [hasAttemptedConnect, setHasAttemptedConnect] = useState(false);
 
   const renderButton = () => {
@@ -60,7 +37,7 @@ export const PlaygroundHeader = ({
     if (connectionState === ConnectionState.Connected) {
       return "Note: session closing soon";
     }
-    return selectedRole ? "Connect" : "Select Role";
+    return sessionId ? "Connect" : "Enter Session ID";
   };
 
   const isConnecting = connectionState === ConnectionState.Connecting;
@@ -83,8 +60,8 @@ export const PlaygroundHeader = ({
   }, [shouldShowButton, isConnected, timeLeft, onConnectClicked]);
 
   const handleConnect = () => {
-    if (selectedRole && !hasAttemptedConnect) {
-      localStorage.setItem('interviewRole', selectedRole);
+    if (sessionId && !hasAttemptedConnect) {
+      localStorage.setItem('interviewSessionId', sessionId);
       setHasAttemptedConnect(true);
       onConnectClicked();
     }
@@ -113,20 +90,17 @@ export const PlaygroundHeader = ({
         {config.settings.editable && <SettingsDropdown />}
         {shouldShowButton && isDisconnected && (
           <>
-            <select
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
+            <input
+              type="text"
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              placeholder="Enter Session ID"
               className="text-white text-sm bg-gray-900 border border-gray-800 rounded-sm px-3 py-2 focus:border-[#BE185D] focus:outline-none"
               disabled={isConnecting || hasAttemptedConnect}
-            >
-              <option value="">Select Role</option>
-              {roles.map(role => (
-                <option key={role.id} value={role.id}>{role.label}</option>
-              ))}
-            </select>
+            />
             <Button
               accentColor={accentColor}
-              disabled={isConnecting || !selectedRole || hasAttemptedConnect}
+              disabled={isConnecting || !sessionId || hasAttemptedConnect}
               onClick={handleConnect}
             >
               {renderButton()}

@@ -1,6 +1,23 @@
 {
   "sortedMiddleware": [],
   "middleware": {},
-  "functions": {},
+  "functions": {
+    "/api/summarize": {
+      "files": [
+        "server/edge-runtime-webpack.js",
+        "server/pages/api/summarize.js"
+      ],
+      "name": "pages/api/summarize",
+      "page": "/api/summarize",
+      "matchers": [
+        {
+          "regexp": "^/api/summarize$",
+          "originalSource": "/api/summarize"
+        }
+      ],
+      "wasm": [],
+      "assets": []
+    }
+  },
   "version": 2
 }

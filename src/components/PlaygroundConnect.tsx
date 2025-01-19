@@ -9,58 +9,19 @@ type PlaygroundConnectProps = {
   onConnectClicked: (mode: ConnectionMode) => void;
 };
 
-const roles = [
-  { id: 'fullstack', label: 'Full Stack Developer' },
-  { id: 'devops', label: 'DevOps Engineer' },
-  { id: 'frontend', label: 'Frontend Developer' },
-  { id: 'backend', label: 'Backend Developer' },
-  { id: 'software', label: 'Software Engineer' },
-  { id: 'data', label: 'Data Engineer' },
-  { id: 'ml', label: 'Machine Learning Engineer' },
-  { id: 'cloud', label: 'Cloud Engineer' },
-  { id: 'sysadmin', label: 'System Administrator' },
-  { id: 'qa', label: 'QA Engineer' },
-  { id: 'electronics', label: 'Electronics Engineer' },
-  { id: 'electrical', label: 'Electrical Engineer' },
-  { id: 'mechanical', label: 'Mechanical Engineer' },
-  { id: 'civil', label: 'Civil Engineer' },
-  { id: 'product', label: 'Product Manager' },
-  { id: 'project', label: 'Project Manager' },
-  { id: 'uiux', label: 'UI/UX Designer' },
-  { id: 'dba', label: 'Database Administrator' },
-  { id: 'security', label: 'Security Engineer' },
-  { id: 'network', label: 'Network Engineer' }
-];
-
-const RoleSelector = ({ selectedRole, setSelectedRole }: { selectedRole: string, setSelectedRole: (role: string) => void }) => (
-  <div className="flex flex-col gap-2">
-    <label className="text-sm text-gray-400 text-left">Select Your Role:</label>
-    <select
-      value={selectedRole}
-      onChange={(e) => setSelectedRole(e.target.value)}
-      className="text-white text-sm bg-gray-900 border border-gray-800 rounded-sm px-3 py-2 focus:border-[#BE185D] focus:outline-none"
-    >
-      <option value="">Select a role...</option>
-      {roles.map(role => (
-        <option key={role.id} value={role.id}>{role.label}</option>
-      ))}
-    </select>
-  </div>
-);
-
 export const PlaygroundConnect = ({
   accentColor,
   onConnectClicked,
 }: PlaygroundConnectProps) => {
-  const [selectedRole, setSelectedRole] = useState('');
-  const copy = "Select your role and connect to begin your interview";
+  const [sessionId, setSessionId] = useState('');
+  const copy = "Enter your session ID to begin your interview";
 
   const handleConnect = () => {
-    if (!selectedRole) {
+    if (!sessionId) {
       return;
     }
-    // Store the role in localStorage before connecting
-    localStorage.setItem('interviewRole', selectedRole);
+    // Store the session ID in localStorage before connecting
+    localStorage.setItem('interviewSessionId', sessionId);
     // Always use env mode to ensure proper token generation
     onConnectClicked("env");
   };
@@ -77,15 +38,24 @@ export const PlaygroundConnect = ({
           </div>
           <div className="flex flex-col bg-gray-900/30 flex-grow p-8">
             <div className="flex flex-col gap-6">
-              <RoleSelector selectedRole={selectedRole} setSelectedRole={setSelectedRole} />
+              <div className="flex flex-col gap-2">
+                <label className="text-sm text-gray-400 text-left">Enter Session ID:</label>
+                <input
+                  type="text"
+                  value={sessionId}
+                  onChange={(e) => setSessionId(e.target.value)}
+                  placeholder="Enter your session ID"
+                  className="text-white text-sm bg-gray-900 border border-gray-800 rounded-sm px-3 py-2 focus:border-[#BE185D] focus:outline-none"
+                />
+              </div>
               
               <Button
                 accentColor={accentColor}
                 className="w-full"
-                disabled={!selectedRole}
+                disabled={!sessionId}
                 onClick={handleConnect}
               >
-                {selectedRole ? 'Start Interview' : 'Please select a role'}
+                {sessionId ? 'Start Interview' : 'Please enter session ID'}
               </Button>
             </div>
           </div>

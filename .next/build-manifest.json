@@ -2,7 +2,9 @@
   "polyfillFiles": [
     "static/chunks/polyfills.js"
   ],
-  "devFiles": [],
+  "devFiles": [
+    "static/chunks/react-refresh.js"
+  ],
   "ampDevFiles": [],
   "lowPriorityFiles": [
     "static/development/_buildManifest.js",
@@ -10,7 +12,31 @@
   ],
   "rootMainFiles": [],
   "pages": {
-    "/_app": []
+    "/_app": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/_app.js"
+    ],
+    "/_error": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/_error.js"
+    ],
+    "/hr-dashboard": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/hr-dashboard.js"
+    ],
+    "/landing": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/landing.js"
+    ],
+    "/test": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/test.js"
+    ]
   },
   "ampFirstPages": []
 }

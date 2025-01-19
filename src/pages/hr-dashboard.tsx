@@ -30,12 +30,18 @@ interface HRProfile {
   hiringRoles: string[];
 }
 
+interface RoleplayPrompt {
+  company: string;
+  role: string;
+  expectations: string;
+}
+
 interface Session {
   id: string;
   createdAt: string;
   studentEmails: string[];
   emailsSent: boolean;
-  role: string;
+  roleplayPrompt: RoleplayPrompt;
 }
 
 interface FeedbackData {
@@ -58,6 +64,18 @@ interface KeyLimits {
   interviewLimit: number;
   studentsPerInterview: number;
   usedInterviews: number;
+  createdAt: string;
+}
+
+interface FirebaseSession {
+  sessionId: string;
+  hrName: string;
+  hrCompany: string;
+  hrIdentifier: string;
+  studentLimit: number;
+  currentStudents: number;
+  invitedEmails: string[];
+  roleplayPrompt: string;
   createdAt: string;
 }
 
@@ -85,48 +103,63 @@ export default function HRDashboard() {
   const [isValidating, setIsValidating] = useState(true);
   const [authKey, setAuthKey] = useState<string | null>(null);
   const [keyLimits, setKeyLimits] = useState<KeyLimits | null>(null);
+  const [roleplayPrompt, setRoleplayPrompt] = useState({
+    company: '',
+    role: '',
+    expectations: ''
+  });
 
-  const availableRoles = [
-    'Fullstack developer',
-    'DevOps',
-    'Frontend developer',
-    'Backend developer',
-    'Software Engineer',
-    'Data Engineer',
-    'Machine Learning Engineer',
-    'Cloud Engineer',
-    'System Administrator',
-    'QA Engineer',
-    'Electronics Engineer',
-    'Electrical Engineer',
-    'Mechanical Engineer',
-    'Civil Engineer',
-    'Product Manager',
-    'Project Manager',
-    'UI/UX Designer',
-    'Database Administrator',
-    'Security Engineer',
-    'Network Engineer'
-  ];
+  // Move loadSessions outside the authentication useEffect
+  const loadSessions = async () => {
+    if (!profile) return;
+
+    // Generate HR identifier
+    const hrIdentifier = `${profile.name}_${profile.dob}_${profile.phone}`;
+    
+    try {
+      // Load from sessions location
+      const sessionsRef = ref(database, 'sessions');
+      const sessionsSnapshot = await get(sessionsRef);
+      
+      let hrSessions: Session[] = [];
+      
+      if (sessionsSnapshot.exists()) {
+        const allSessions = sessionsSnapshot.val();
+        // Filter sessions belonging to current HR
+        Object.entries(allSessions).forEach(([key, session]) => {
+          const fbSession = session as FirebaseSession;
+          if (fbSession.hrIdentifier === hrIdentifier) {
+            hrSessions.push({
+              id: fbSession.sessionId,
+              createdAt: fbSession.createdAt,
+              studentEmails: fbSession.invitedEmails,
+              emailsSent: true,
+              roleplayPrompt: {
+                company: fbSession.hrCompany,
+                role: fbSession.roleplayPrompt.split('\n')[1]?.replace('We are interviewing for the role of', '').trim() || '',
+                expectations: fbSession.roleplayPrompt.split('\n')[2]?.replace('We want candidates who are', '').trim() || ''
+              }
+            });
+          }
+        });
+      }
+
+      // Set sessions in state
+      if (hrSessions.length > 0) {
+        setSessions(hrSessions);
+        setLatestSession(hrSessions[hrSessions.length - 1]);
+        
+        // Fetch feedback for all sessions
+        hrSessions.forEach(session => {
+          fetchLatestFeedback(session.id);
+        });
+      }
+    } catch (error) {
+      console.error('Error loading sessions:', error);
+    }
+  };
 
   useEffect(() => {
-    // Initialize sessions from localStorage
-    const savedSessions = localStorage.getItem('hrSessions');
-    if (savedSessions) {
-      const parsedSessions = JSON.parse(savedSessions);
-      const sessions = parsedSessions.map((session: any) => ({
-        ...session,
-        studentEmails: session.studentEmails || [],
-        emailsSent: session.emailsSent || false
-      }));
-      setSessions(sessions);
-      
-      // Fetch feedback for all sessions
-      sessions.forEach((session: Session) => {
-        fetchLatestFeedback(session.id);
-      });
-    }
-
     // Check if HR is authenticated
     const storedProfile = localStorage.getItem('hrProfile');
     const storedKey = localStorage.getItem('hrAuthKey');
@@ -182,7 +215,7 @@ export default function HRDashboard() {
             return;
           }
 
-          // Set and store key limits
+          // Set key limits
           const limits = {
             validityDays: keyData.validityDays,
             interviewLimit: keyData.interviewLimit || -1,
@@ -215,6 +248,13 @@ export default function HRDashboard() {
 
     validateStoredKey();
   }, [router]);
+
+  // Add new useEffect to handle session loading
+  useEffect(() => {
+    if (profile && !isValidating) {
+      loadSessions();
+    }
+  }, [profile, isValidating]);
 
   useEffect(() => {
     // Save sessions to localStorage whenever they change
@@ -397,104 +437,197 @@ export default function HRDashboard() {
   };
 
   const createSession = async (emails: string[]) => {
-    if (!selectedRole) {
-      alert('Please select a role first');
+    if (!profile || !keyLimits) return;
+
+    // Validate roleplay prompt
+    if (!roleplayPrompt.company || !roleplayPrompt.role || !roleplayPrompt.expectations) {
+      alert('Please fill in all roleplay prompt fields');
       return;
     }
 
-    if (!keyLimits) {
-      alert('Key limits not found. Please try logging in again.');
-      return;
-    }
-
-    // Check interview limit
-    if (keyLimits.interviewLimit !== -1 && keyLimits.usedInterviews >= keyLimits.interviewLimit) {
-      alert('You have reached the maximum number of interviews allowed with this key.');
-      return;
-    }
-
-    // Check students per interview limit
-    if (keyLimits.studentsPerInterview !== -1 && emails.length > keyLimits.studentsPerInterview) {
-      alert(`This key only allows up to ${keyLimits.studentsPerInterview} students per interview.`);
-      return;
-    }
-
-    if (profile) {
-      try {
-        // Clear previous session data first
-        await clearPreviousSessionData();
-
-        const sessionId = generateSessionId(profile);
-        const newSession = {
-          id: sessionId,
-          createdAt: new Date().toISOString(),
-          studentEmails: emails,
-          emailsSent: false,
-          role: selectedRole
-        };
-        
-        // Update used interviews count in the key
-        const keysRef = ref(database, 'hr_auth_keys');
-        const snapshot = await get(keysRef);
-        
-        if (snapshot.exists()) {
-          const keys = snapshot.val();
-          for (const [keyId, keyData] of Object.entries(keys)) {
-            if ((keyData as any).value === authKey) {
-              const keyRef = ref(database, `hr_auth_keys/${keyId}`);
-              const newUsedInterviews = ((keyData as any).usedInterviews || 0) + 1;
-              await set(keyRef, {
-                ...(keyData as any),
-                usedInterviews: newUsedInterviews
-              });
-
-              // Update local storage with new count
-              const updatedLimits = {
-                ...keyLimits,
-                usedInterviews: newUsedInterviews
-              };
-              setKeyLimits(updatedLimits);
-              localStorage.setItem('keyLimits', JSON.stringify(updatedLimits));
-              break;
-            }
+    setProcessingSession('creating');
+    try {
+      // Generate unique HR identifier using name, dob, and phone
+      const hrIdentifier = `${profile.name}_${profile.dob}_${profile.phone}`;
+      console.log('Clearing previous sessions for HR:', hrIdentifier);
+      
+      // Clear from sessions location
+      const sessionsRef = ref(database, 'sessions');
+      const sessionsSnapshot = await get(sessionsRef);
+      if (sessionsSnapshot.exists()) {
+        const allSessions = sessionsSnapshot.val();
+        // Delete only sessions belonging to current HR
+        for (const [key, session] of Object.entries(allSessions)) {
+          const fbSession = session as FirebaseSession;
+          if (fbSession.hrIdentifier === hrIdentifier) {
+            await set(ref(database, `sessions/${key}`), null);
           }
         }
-
-        // Save new session to Firebase with invited emails
-        const sessionRef = ref(database, 'keys/variable/sessionid');
-        const newSessionRef = push(sessionRef);
-        await set(newSessionRef, {
-          sessionId: sessionId,
-          createdAt: newSession.createdAt,
-          hrName: profile.name,
-          company: profile.company,
-          role: selectedRole,
-          studentLimit: keyLimits.studentsPerInterview,
-          currentStudents: 0,
-          invitedEmails: emails
-        });
-
-        // Update local state with only the new session
-        setSessions([newSession]);
-        setLatestSession(newSession);
-        setSelectedRole('');
-
-        // Send invitations
-        await sendInvitations(newSession);
-
-        // Set up feedback checking
-        const checkInterval = setInterval(async () => {
-          await fetchLatestFeedback(sessionId);
-        }, 30000);
-
-        setTimeout(() => {
-          clearInterval(checkInterval);
-        }, 60 * 60 * 1000);
-
-      } catch (error) {
-        console.error('Error creating session:', error);
-        alert('Failed to create session. Please try again.');
       }
+
+      // Clear from keys/variable/sessionid
+      const keySessionRef = ref(database, 'keys/variable/sessionid');
+      const keySnapshot = await get(keySessionRef);
+      if (keySnapshot.exists()) {
+        const allKeySessions = keySnapshot.val();
+        // Delete only sessions belonging to current HR
+        for (const [key, session] of Object.entries(allKeySessions)) {
+          const fbSession = session as FirebaseSession;
+          if (fbSession.hrIdentifier === hrIdentifier) {
+            await set(ref(database, `keys/variable/sessionid/${key}`), null);
+          }
+        }
+      }
+      
+      // Clear local state
+      setSessions([]);
+      setLatestSession(null);
+      setSessionFeedbacks({});
+      
+      // Generate new session
+      const sessionId = generateSessionId(profile);
+      
+      // Format the roleplay prompt as a paragraph
+      const formattedPrompt = `My company is ${roleplayPrompt.company}\nWe are interviewing for the role of ${roleplayPrompt.role}\nWe want candidates who are ${roleplayPrompt.expectations}`;
+      
+      const sessionData = {
+        sessionId: sessionId,
+        hrName: profile.name,
+        hrCompany: profile.company,
+        hrIdentifier: hrIdentifier,
+        studentLimit: keyLimits.studentsPerInterview,
+        currentStudents: 0,
+        invitedEmails: emails,
+        roleplayPrompt: formattedPrompt,
+        createdAt: new Date().toISOString()
+      };
+
+      // Store in sessions/${sessionId}
+      const newSessionRef = ref(database, `sessions/${sessionId}`);
+      await set(newSessionRef, sessionData);
+
+      // Also store in keys/variable/sessionid
+      const newKeyRef = push(keySessionRef);
+      await set(newKeyRef, sessionData);
+
+      const newSession: Session = {
+        id: sessionId,
+        createdAt: new Date().toISOString(),
+        studentEmails: emails,
+        emailsSent: false,
+        roleplayPrompt
+      };
+
+      // Update local state with only the new session
+      setSessions([newSession]);
+      setLatestSession(newSession);
+      setTempEmails([]);
+      
+      // Send invitations immediately after creating session
+      await sendInvitations(newSession);
+      
+      // Update used interviews count in Firebase
+      if (keyLimits.interviewLimit > 0) {
+        const keysRef = ref(database, 'hr_auth_keys');
+        const snapshot = await get(keysRef);
+        if (snapshot.exists()) {
+          const keys = snapshot.val();
+          Object.entries(keys).forEach(async ([keyId, k]: [string, any]) => {
+            if (k.value === authKey) {
+              await set(ref(database, `hr_auth_keys/${keyId}/usedInterviews`), (k.usedInterviews || 0) + 1);
+            }
+          });
+        }
+      }
+
+      // Close the modal after everything is done
+      setShowRoleSelection(false);
+      
+      console.log('New session created successfully:', sessionId);
+    } catch (error) {
+      console.error('Error creating session:', error);
+      alert('Failed to create session. Please try again.');
+    } finally {
+      setProcessingSession(null);
+    }
+  };
+
+  const sendInvitations = async (session: Session) => {
+    setSendingEmails(true);
+    try {
+      const landingPageUrl = `${window.location.origin}/landing`;
+      
+      // Format the roleplay prompt as a paragraph
+      const formattedPrompt = `My company is ${session.roleplayPrompt.company}\nWe are interviewing for the role of ${session.roleplayPrompt.role}\nWe want candidates who are ${session.roleplayPrompt.expectations}`;
+      
+      const subject = encodeURIComponent(`Interview Invitation - ${profile?.company} - AI-Based Assessment`);
+      const body = encodeURIComponent(
+`Dear Candidate,
+
+Thank you for your interest in joining ${profile?.company}. We are excited to invite you to participate in our innovative AI-based interview assessment.
+
+Interview Details:
+- Platform: Mockello AI Interview System
+- Session Code: ${session.id}
+
+Interview Context:
+${formattedPrompt}
+
+Duration: 15-20 minutes
+Deadline: Within 48 hours
+
+Getting Started:
+1. Visit our interview platform: ${landingPageUrl}
+2. Enter the session code: ${session.id}
+3. Complete your registration
+4. Begin the interview process
+
+Technical Requirements:
+- Stable internet connection
+- Working webcam and microphone
+- Quiet environment
+- Chrome/Firefox browser (latest version)
+
+Important Guidelines:
+- Ensure good lighting and clear audio
+- Dress professionally
+- Have your resume handy for reference
+- Complete the interview in one sitting
+- Answer all questions thoroughly and professionally
+
+If you encounter any technical issues, please contact our support team immediately.
+
+We look forward to your participation.
+
+Best regards,
+${profile?.name}
+${profile?.company}
+`);
+
+      // Create a mailto link and programmatically click it
+      const allEmails = session.studentEmails.join(',');
+      const mailtoLink = document.createElement('a');
+      mailtoLink.href = `mailto:${allEmails}?subject=${subject}&body=${body}`;
+      document.body.appendChild(mailtoLink);
+      mailtoLink.click();
+      document.body.removeChild(mailtoLink);
+      
+      // Mark session as emails sent
+      setSessions(prev => prev.map(s => {
+        if (s.id === session.id) {
+          return { ...s, emailsSent: true };
+        }
+        return s;
+      }));
+
+      // Show success message
+      alert('Email client opened with all recipients. Please send the email to complete the process.');
+      
+    } catch (error) {
+      console.error('Failed to send emails:', error);
+      alert('Failed to send emails. Please try again.');
+    } finally {
+      setSendingEmails(false);
     }
   };
 
@@ -550,75 +683,6 @@ export default function HRDashboard() {
       }
       return session;
     }));
-  };
-
-  const sendInvitations = async (session: Session) => {
-    setSendingEmails(true);
-    try {
-      const landingPageUrl = `${window.location.origin}/landing`;
-      
-      const subject = encodeURIComponent(`Interview Invitation - ${profile?.company} - AI-Based Assessment`);
-      const body = encodeURIComponent(
-`Dear Candidate,
-
-Thank you for your interest in joining ${profile?.company}. We are excited to invite you to participate in our innovative AI-based interview assessment.
-
-Interview Details:
-- Platform: Mockello AI Interview System
-- Session Code: ${session.id}
-- Role: ${session.role}
-- Duration: 15-20 minutes
-- Deadline: Within 48 hours
-
-Getting Started:
-1. Visit our interview platform: ${landingPageUrl}
-2. Enter the session code: ${session.id}
-3. Complete your registration
-4. Begin the interview process
-
-Technical Requirements:
-- Stable internet connection
-- Working webcam and microphone
-- Quiet environment
-- Chrome/Firefox browser (latest version)
-
-Important Guidelines:
-- Ensure good lighting and clear audio
-- Dress professionally
-- Have your resume handy for reference
-- Complete the interview in one sitting
-- Answer all questions thoroughly and professionally
-
-If you encounter any technical issues, please contact our support team immediately.
-
-We look forward to your participation.
-
-Best regards,
-${profile?.name}
-${profile?.company}
-`);
-
-      // Send emails to all students in the session using a single mailto link
-      const allEmails = session.studentEmails.join(',');
-      window.location.href = `mailto:${allEmails}?subject=${subject}&body=${body}`;
-      
-      // Mark session as emails sent
-      setSessions(prev => prev.map(s => {
-        if (s.id === session.id) {
-          return { ...s, emailsSent: true };
-        }
-        return s;
-      }));
-
-      // Show success message
-      alert('Email client opened with all recipients. Please send the email to complete the process.');
-      
-    } catch (error) {
-      console.error('Failed to send emails:', error);
-      alert('Failed to send emails. Please try again.');
-    } finally {
-      setSendingEmails(false);
-    }
   };
 
   const toggleCandidateSelection = (sessionId: string, item: string) => {
@@ -853,7 +917,7 @@ ${profile?.company}`
               {session.id}
             </div>
             <div className="text-sm text-[#BE185D] mt-1">
-              Role: {session.role}
+              Role: {session.roleplayPrompt.role}
             </div>
           </div>
           <button
@@ -1451,102 +1515,112 @@ ${profile?.company}
             className="bg-black/90 p-8 rounded-2xl border border-[#BE185D]/20 max-w-md w-full mx-4 relative"
           >
             <h2 className="text-2xl font-bold mb-6 text-center bg-clip-text text-transparent bg-gradient-to-r from-[#BE185D] to-white">
-              Select Interview Role
+              Create Interview Session
             </h2>
-            
-            {/* Email Input Section */}
-            {selectedRole && (
-              <>
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-[#BE185D] mb-4">Add Participant Emails</h3>
+
+            {/* Roleplay Prompt Section */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-[#BE185D] mb-4">Interview Context</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Complete the interview scenario:</label>
                   <div className="space-y-4">
-                    <div className="flex gap-2">
-                      <input
-                        type="email"
-                        value={newEmail}
-                        onChange={handleEmailChange}
-                        placeholder="Enter email address"
-                        className="flex-1 px-4 py-3 bg-black/50 border border-[#BE185D]/20 rounded-lg focus:outline-none focus:border-[#BE185D] transition-colors text-white placeholder-gray-500"
-                      />
-                      <button
-                        onClick={() => {
-                          if (newEmail && !emailError) {
-                            setNewEmail('');
-                            setEmailError('');
-                            setTempEmails(prev => [...prev, newEmail]);
-                          }
-                        }}
-                        className="px-4 py-2 bg-[#BE185D]/20 text-[#BE185D] rounded-lg hover:bg-[#BE185D]/30 transition-colors"
-                      >
-                        Add
-                      </button>
-                    </div>
-                    {emailError && (
-                      <p className="text-red-500 text-sm">{emailError}</p>
-                    )}
-                  </div>
-                  
-                  {/* Added Emails List */}
-                  <div className="mt-4 max-h-[200px] overflow-y-auto custom-scrollbar">
-                    {tempEmails.map((email, index) => (
-                      <div key={index} className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-lg mb-2">
-                        <span className="text-gray-300">{email}</span>
-                        <button
-                          onClick={() => setTempEmails(prev => prev.filter((_, i) => i !== index))}
-                          className="text-[#BE185D] hover:text-white transition-colors"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
+                    <input
+                      type="text"
+                      value={roleplayPrompt.company}
+                      onChange={(e) => setRoleplayPrompt(prev => ({ ...prev, company: e.target.value }))}
+                      placeholder="My company is ..."
+                      className="w-full px-4 py-3 bg-black/50 border border-[#BE185D]/20 rounded-lg focus:outline-none focus:border-[#BE185D] transition-colors text-white placeholder-gray-500"
+                    />
+                    <input
+                      type="text"
+                      value={roleplayPrompt.role}
+                      onChange={(e) => setRoleplayPrompt(prev => ({ ...prev, role: e.target.value }))}
+                      placeholder="We are interviewing for the role of ..."
+                      className="w-full px-4 py-3 bg-black/50 border border-[#BE185D]/20 rounded-lg focus:outline-none focus:border-[#BE185D] transition-colors text-white placeholder-gray-500"
+                    />
+                    <textarea
+                      value={roleplayPrompt.expectations}
+                      onChange={(e) => setRoleplayPrompt(prev => ({ ...prev, expectations: e.target.value }))}
+                      placeholder="We want candidates who are ..."
+                      rows={3}
+                      className="w-full px-4 py-3 bg-black/50 border border-[#BE185D]/20 rounded-lg focus:outline-none focus:border-[#BE185D] transition-colors text-white placeholder-gray-500 resize-none"
+                    />
                   </div>
                 </div>
+              </div>
+            </div>
 
-                {/* Create and Send Invitations Button */}
-                <button
-                  onClick={() => {
-                    if (tempEmails.length > 0) {
-                      createSession(tempEmails);
-                      setTempEmails([]);
-                      setShowRoleSelection(false);
-                    } else {
-                      alert('Please add at least one email address');
-                    }
-                  }}
-                  className="w-full px-6 py-3 bg-[#BE185D] text-white rounded-lg hover:bg-[#BE185D]/80 transition-colors"
-                >
-                  Create Session & Send Invitations
-                </button>
-              </>
-            )}
-
-            {/* Role Selection List */}
-            {!selectedRole && (
-              <>
-                <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
-                  <div className="space-y-3 pr-2">
-                    {availableRoles.map((role) => (
-                      <button
-                        key={role}
-                        onClick={() => setSelectedRole(role)}
-                        className={`w-full px-6 py-4 rounded-xl border text-left ${
-                          selectedRole === role
-                            ? 'bg-[#BE185D] border-[#BE185D] text-white'
-                            : 'border-[#BE185D]/20 hover:border-[#BE185D] text-gray-300 hover:text-white'
-                        } transition-all duration-300`}
-                      >
-                        {role}
-                      </button>
-                    ))}
-                  </div>
+            {/* Email Input Section */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-[#BE185D] mb-4">Add Participant Emails</h3>
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={handleEmailChange}
+                    placeholder="Enter email address"
+                    className="flex-1 px-4 py-3 bg-black/50 border border-[#BE185D]/20 rounded-lg focus:outline-none focus:border-[#BE185D] transition-colors text-white placeholder-gray-500"
+                  />
+                  <button
+                    onClick={() => {
+                      if (newEmail && !emailError) {
+                        setNewEmail('');
+                        setEmailError('');
+                        setTempEmails(prev => [...prev, newEmail]);
+                      }
+                    }}
+                    className="px-4 py-2 bg-[#BE185D]/20 text-[#BE185D] rounded-lg hover:bg-[#BE185D]/30 transition-colors"
+                  >
+                    Add
+                  </button>
                 </div>
-              </>
-            )}
+                {emailError && (
+                  <p className="text-red-500 text-sm">{emailError}</p>
+                )}
+              </div>
+              
+              {/* Added Emails List */}
+              <div className="mt-4 max-h-[200px] overflow-y-auto custom-scrollbar">
+                {tempEmails.map((email, index) => (
+                  <div key={index} className="flex items-center justify-between py-2 px-3 bg-black/20 rounded-lg mb-2">
+                    <span className="text-gray-300">{email}</span>
+                    <button
+                      onClick={() => setTempEmails(prev => prev.filter((_, i) => i !== index))}
+                      className="text-[#BE185D] hover:text-white transition-colors"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Create and Send Invitations Button */}
+            <button
+              onClick={() => {
+                if (!roleplayPrompt.company || !roleplayPrompt.role || !roleplayPrompt.expectations) {
+                  alert('Please complete all interview context fields');
+                  return;
+                }
+                if (tempEmails.length > 0) {
+                  createSession(tempEmails);
+                  setTempEmails([]);
+                  setShowRoleSelection(false);
+                } else {
+                  alert('Please add at least one email address');
+                }
+              }}
+              className="w-full px-6 py-3 bg-[#BE185D] text-white rounded-lg hover:bg-[#BE185D]/80 transition-colors"
+            >
+              Create Session & Send Invitations
+            </button>
 
             <button
               onClick={() => {
                 setShowRoleSelection(false);
-                setSelectedRole('');
+                setRoleplayPrompt({ company: '', role: '', expectations: '' });
                 setTempEmails([]);
               }}
               className="w-full px-6 py-3 mt-6 text-gray-400 hover:text-white transition-colors"
