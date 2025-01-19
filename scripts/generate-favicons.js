@@ -25,71 +25,69 @@ async function generateFavicons() {
       'mstile-310x310.png': 310,
     };
 
-    // Generate square icons
+    // Generate square icons with circular mask
     for (const [filename, size] of Object.entries(sizes)) {
+      // Create a circular mask
+      const mask = Buffer.from(`
+        <svg width="${size}" height="${size}">
+          <circle cx="${size/2}" cy="${size/2}" r="${size/2}" fill="white"/>
+        </svg>
+      `);
+
       await sharp(svgBuffer)
         .resize(size, size)
         .composite([{
-          input: Buffer.from(`<svg><rect width="${size}" height="${size}" fill="${MOCKELLO_PINK}"/></svg>`),
-          blend: 'multiply'
+          input: mask,
+          blend: 'dest-in'
         }])
         .png()
         .toFile(path.join(__dirname, '../public', filename));
     }
 
-    // Generate wide tile
+    // Generate wide tile with circular design
     await sharp(svgBuffer)
       .resize(310, 150)
-      .composite([{
-        input: Buffer.from(`<svg><rect width="310" height="150" fill="${MOCKELLO_PINK}"/></svg>`),
-        blend: 'multiply'
-      }])
+      .extend({
+        top: 0,
+        bottom: 0,
+        left: 80,
+        right: 80,
+        background: { r: 190, g: 24, b: 93 } // #BE185D
+      })
       .png()
       .toFile(path.join(__dirname, '../public/mstile-310x150.png'));
 
-    // Generate social media images
+    // Generate social media images with centered circular design
     const socialSizes = {
       'og-image.png': { width: 1200, height: 630 },
       'twitter-card.png': { width: 1200, height: 600 }
     };
 
     for (const [filename, dimensions] of Object.entries(socialSizes)) {
+      const iconSize = Math.min(dimensions.width, dimensions.height) * 0.6;
+      
       await sharp(svgBuffer)
-        .resize(Math.floor(dimensions.height * 0.8), Math.floor(dimensions.height * 0.8))
-        .composite([{
-          input: Buffer.from(`<svg><rect width="${dimensions.height * 0.8}" height="${dimensions.height * 0.8}" fill="${MOCKELLO_PINK}"/></svg>`),
-          blend: 'multiply'
-        }])
+        .resize(Math.round(iconSize), Math.round(iconSize))
         .extend({
-          top: Math.floor((dimensions.height - dimensions.height * 0.8) / 2),
-          bottom: Math.floor((dimensions.height - dimensions.height * 0.8) / 2),
-          left: Math.floor((dimensions.width - dimensions.height * 0.8) / 2),
-          right: Math.floor((dimensions.width - dimensions.height * 0.8) / 2),
+          top: Math.round((dimensions.height - iconSize) / 2),
+          bottom: Math.round((dimensions.height - iconSize) / 2),
+          left: Math.round((dimensions.width - iconSize) / 2),
+          right: Math.round((dimensions.width - iconSize) / 2),
           background: { r: 0, g: 0, b: 0 }
         })
         .png()
         .toFile(path.join(__dirname, '../public', filename));
     }
 
-    // Generate ICO file with multiple sizes
-    const icoSizes = [16, 32, 48];
-    const icoBuffers = await Promise.all(
-      icoSizes.map(size =>
-        sharp(svgBuffer)
-          .resize(size, size)
-          .composite([{
-            input: Buffer.from(`<svg><rect width="${size}" height="${size}" fill="${MOCKELLO_PINK}"/></svg>`),
-            blend: 'multiply'
-          }])
-          .png()
-          .toBuffer()
-      )
-    );
+    // Generate ICO file
+    const icoBuffer = await sharp(svgBuffer)
+      .resize(32, 32)
+      .png()
+      .toBuffer();
 
-    // Use the first size as the favicon.ico
     await fs.writeFile(
       path.join(__dirname, '../public/favicon.ico'),
-      icoBuffers[0]
+      icoBuffer
     );
 
     console.log('Successfully generated all favicons and social media images!');
