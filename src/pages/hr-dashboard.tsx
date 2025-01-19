@@ -77,6 +77,17 @@ interface FirebaseSession {
   invitedEmails: string[];
   roleplayPrompt: string;
   createdAt: string;
+  feedback?: string;
+  interviewDate?: string;
+  interviewTime?: string;
+  name?: string;
+  performancePercentage?: number;
+  registerNumber?: string;
+  stars?: number;
+  timestamp?: string;
+  totalWords?: number;
+  transcriptionCount?: number;
+  email?: string;
 }
 
 export default function HRDashboard() {
@@ -303,35 +314,75 @@ export default function HRDashboard() {
 
   const fetchLatestFeedback = async (sessionId: string) => {
     setIsLoadingFeedback(true);
+    console.log('Fetching feedback for session:', sessionId);
+    
     try {
-      const feedbackRef = ref(database, 'interview_feedback');
-      // Set up real-time listener
-      onValue(feedbackRef, (snapshot) => {
+      // Get reference directly to the specific session
+      const sessionRef = ref(database, `sessions/${sessionId}`);
+      console.log('Attempting to retrieve session data from path:', `sessions/${sessionId}`);
+      
+      // Set up real-time listener for the specific session
+      onValue(sessionRef, (snapshot) => {
+        console.log('Session data snapshot exists:', snapshot.exists());
+        
         if (snapshot.exists()) {
-          const feedbacks: FeedbackData[] = [];
+          const sessionData = snapshot.val();
+          console.log('Retrieved session data:', sessionData);
           
-          snapshot.forEach((registerSnapshot) => {
-            registerSnapshot.forEach((sessionSnapshot) => {
-              const data = sessionSnapshot.val();
-              if (data.sessionId === sessionId) {
-                feedbacks.push(data);
-              }
-            });
-          });
+          // Check if this session has feedback data
+          if (sessionData.feedback) {
+            console.log('Found feedback in session data');
+            // Create a feedback object from the session data
+            const feedback: FeedbackData = {
+              feedback: sessionData.feedback,
+              interviewDate: sessionData.interviewDate || '',
+              interviewTime: sessionData.interviewTime || '',
+              name: sessionData.name || '',
+              performancePercentage: sessionData.performancePercentage || 0,
+              registerNumber: sessionData.registerNumber || '',
+              sessionId: sessionId,
+              stars: sessionData.stars || 0,
+              timestamp: sessionData.timestamp || '',
+              totalWords: sessionData.totalWords || 0,
+              transcriptionCount: sessionData.transcriptionCount || 0,
+              email: sessionData.email
+            };
 
-          // Sort feedbacks by performance percentage in descending order
-          const sortedFeedbacks = feedbacks.sort((a, b) => b.performancePercentage - a.performancePercentage);
-          
-          if (sortedFeedbacks.length > 0) {
-            setSessionFeedbacks(prev => ({
-              ...prev,
-              [sessionId]: sortedFeedbacks
-            }));
+            console.log('Created feedback object:', feedback);
+
+            // Update the feedbacks state for this specific session only
+            setSessionFeedbacks(prev => {
+              const updated = {
+                ...prev,
+                [sessionId]: [feedback]
+              };
+              console.log('Updated session feedbacks for session', sessionId, ':', updated);
+              return updated;
+            });
+          } else {
+            console.log('No feedback found for session:', sessionId);
+            // Clear any existing feedback for this session
+            setSessionFeedbacks(prev => {
+              const { [sessionId]: _, ...rest } = prev;
+              return rest;
+            });
           }
+        } else {
+          console.log('No session data found for ID:', sessionId);
+          // Clear any existing feedback for this session
+          setSessionFeedbacks(prev => {
+            const { [sessionId]: _, ...rest } = prev;
+            return rest;
+          });
         }
       });
     } catch (error) {
-      console.error('Error fetching feedback:', error);
+      console.error('Error fetching feedback for session', sessionId, ':', error);
+      // Clear any existing feedback for this session on error
+      setSessionFeedbacks(prev => {
+        const { [sessionId]: _, ...rest } = prev;
+        return rest;
+      });
     } finally {
       setIsLoadingFeedback(false);
     }
@@ -720,21 +771,37 @@ ${profile?.company}
       const qualifiedCandidates = feedbacks.filter(f => selectedRegs.has(f.registerNumber));
       const nonQualifiedCandidates = feedbacks.filter(f => !selectedRegs.has(f.registerNumber));
       
+      // Format selected candidates list
+      const selectedCandidatesList = qualifiedCandidates
+        .map((candidate, index) => 
+          `${index + 1}. ${candidate.name} (${candidate.email || candidate.registerNumber})
+           Performance: ${candidate.performancePercentage}%
+           Rating: ${candidate.feedback.match(/★+½?(?=☆|$)/) || '★'}`
+        )
+        .join('\n\n');
+      
       // Send emails to qualified candidates
       for (const candidate of qualifiedCandidates) {
         if (candidate.email) {
-          const subject = encodeURIComponent(`Congratulations! Qualified for Next Round - Mockello Interview`);
+          const subject = encodeURIComponent(`Congratulations! Selected for Next Round - ${profile?.company}`);
           const body = encodeURIComponent(
 `Dear ${candidate.name},
 
-Congratulations! We are pleased to inform you that you have been selected to proceed to the next round of interviews with ${profile?.company}.
+Congratulations! Based on your performance in the initial interview assessment, we are pleased to inform you that you have been selected to proceed to the next round of interviews with ${profile?.company}.
+
+Your Performance Metrics:
+• Overall Score: ${candidate.performancePercentage}%
+• Total Responses: ${candidate.transcriptionCount}
+• Communication Score: ${candidate.totalWords} words
+
+Next Steps:
+We will be conducting the next round of interviews shortly. You will receive a separate email with the venue details and timing.
 
 Best regards,
 ${profile?.name}
 ${profile?.company}`
           );
           window.location.href = `mailto:${candidate.email}?subject=${subject}&body=${body}`;
-          // Add a small delay between emails
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
@@ -742,22 +809,21 @@ ${profile?.company}`
       // Send emails to non-qualified candidates
       for (const candidate of nonQualifiedCandidates) {
         if (candidate.email) {
-          const subject = encodeURIComponent(`Interview Results - Mockello`);
+          const subject = encodeURIComponent(`Interview Results - ${profile?.company}`);
           const body = encodeURIComponent(
 `Dear ${candidate.name},
 
 Thank you for participating in the interview process with ${profile?.company}.
 
-While we were impressed with your profile, we regret to inform you that we will not be moving forward with your application at this time.
+While we appreciate your interest and the time you invested in the interview process, we regret to inform you that we will not be moving forward with your application at this time.
 
-We wish you the best in your future endeavors.
+We encourage you to apply for future opportunities that match your skills and experience.
 
 Best regards,
 ${profile?.name}
 ${profile?.company}`
           );
           window.location.href = `mailto:${candidate.email}?subject=${subject}&body=${body}`;
-          // Add a small delay between emails
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
@@ -776,18 +842,38 @@ ${profile?.company}`
     const [showFeedbackModal, setShowFeedbackModal] = useState(false);
     const isSelected = selectedCandidates[feedback.sessionId]?.has(feedback.registerNumber) || false;
 
-    // Filter out sensitive information from feedback
-    const filteredFeedback = feedback.feedback
-      .split('\n')
-      .filter(line => 
-        !line.toLowerCase().includes('hiring recommendation') && 
-        !line.toLowerCase().includes('physical presentation') &&
-        !line.toLowerCase().includes('recommendation:') &&
-        !line.toLowerCase().includes('appearance:') &&
-        !line.toLowerCase().includes('attire:') &&
-        !line.toLowerCase().includes('dress code:')
-      )
-      .join('\n');
+    // Extract star rating from feedback text
+    const getStarRating = (feedbackText: string) => {
+      const starMatch = feedbackText.match(/★+½?(?=☆|$)/);
+      return starMatch ? starMatch[0] : '';
+    };
+
+    // Format the feedback for display
+    const formatFeedback = (feedbackText: string) => {
+      // Split feedback into sections
+      const sections = feedbackText.split('\n\n').filter(Boolean);
+      
+      const formattedSections = sections.map(section => {
+        // Remove sensitive information
+        if (section.toLowerCase().includes('hiring recommendation') ||
+            section.toLowerCase().includes('physical presentation') ||
+            section.toLowerCase().includes('appearance') ||
+            section.toLowerCase().includes('attire') ||
+            section.toLowerCase().includes('dress code')) {
+          return null;
+        }
+
+        // Format evaluation sections
+        if (section.includes('Evaluation:')) {
+          const [title, ...content] = section.split('\n');
+          return `**${title}**\n${content.join('\n')}`;
+        }
+
+        return section;
+      }).filter(Boolean);
+
+      return formattedSections.join('\n\n');
+    };
 
     return (
       <>
@@ -809,19 +895,19 @@ ${profile?.company}`
             </div>
             <div className="col-span-2">
               <p className="text-white font-medium">{feedback.name}</p>
-              <p className="text-gray-400 text-sm">{feedback.registerNumber}</p>
+              <p className="text-gray-400 text-sm">{feedback.email || feedback.registerNumber}</p>
             </div>
             <div className="text-center">
               <p className="text-[#BE185D] font-bold text-xl">{feedback.performancePercentage}%</p>
               <p className="text-gray-400 text-xs">Performance</p>
             </div>
             <div className="text-center">
-              <p className="text-white font-medium">{feedback.transcriptionCount}</p>
-              <p className="text-gray-400 text-xs">Responses</p>
+              <p className="text-white font-medium">{getStarRating(feedback.feedback) || '★'}</p>
+              <p className="text-gray-400 text-xs">Rating</p>
             </div>
             <div className="text-center">
-              <p className="text-white font-medium">{feedback.totalWords}</p>
-              <p className="text-gray-400 text-xs">Words</p>
+              <p className="text-white font-medium">{feedback.transcriptionCount}</p>
+              <p className="text-gray-400 text-xs">Responses</p>
             </div>
             <div className="text-center">
               <button
@@ -860,10 +946,13 @@ ${profile?.company}`
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h2 className="text-2xl font-bold text-[#BE185D] mb-1">{feedback.name}</h2>
-                  <p className="text-gray-400">{feedback.registerNumber}</p>
+                  <p className="text-gray-400">{feedback.email || feedback.registerNumber}</p>
                 </div>
-                <div className="text-3xl font-bold text-[#BE185D]">
-                  {feedback.performancePercentage}%
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-[#BE185D] mb-1">
+                    {feedback.performancePercentage}%
+                  </div>
+                  <div className="text-xl text-[#BE185D]">{getStarRating(feedback.feedback)}</div>
                 </div>
               </div>
 
@@ -885,7 +974,9 @@ ${profile?.company}`
               <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <div className="bg-black/20 p-6 rounded-xl border border-[#BE185D]/10">
                   <h3 className="text-lg font-semibold text-[#BE185D] mb-4">Feedback Summary</h3>
-                  <p className="text-white whitespace-pre-line">{filteredFeedback}</p>
+                  <div className="text-white whitespace-pre-line prose prose-invert">
+                    {formatFeedback(feedback.feedback)}
+                  </div>
                 </div>
               </div>
 

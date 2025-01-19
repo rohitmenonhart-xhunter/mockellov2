@@ -152,24 +152,44 @@ export default function LandingPage() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setIsMicAvailable(true);
       
-      // Create audio analyzer
-      const audioContext = new AudioContext();
+      // Create audio context with user interaction to comply with browser policies
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Resume audio context (required by some browsers)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      
       const analyser = audioContext.createAnalyser();
       const microphone = audioContext.createMediaStreamSource(stream);
       microphone.connect(analyser);
-      analyser.fftSize = 256;
       
+      // Configure analyzer
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.8;
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       
       setIsCheckingAudio(true);
       
-      // Monitor audio levels
+      // Monitor audio levels with better sensitivity
       const checkAudioLevel = () => {
-        if (!isCheckingAudio) return;
+        if (!isCheckingAudio) {
+          audioContext.close();
+          return;
+        }
         
         analyser.getByteFrequencyData(dataArray);
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        setVolume(average);
+        
+        // Calculate RMS value for better volume representation
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += (dataArray[i] * dataArray[i]);
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        
+        // Scale the volume for better visualization
+        const scaledVolume = Math.min(255, rms * 4);
+        setVolume(scaledVolume);
         
         requestAnimationFrame(checkAudioLevel);
       };
@@ -188,25 +208,35 @@ export default function LandingPage() {
   const testMediaDevices = async () => {
     setIsTestingMedia(true);
     setMediaError('');
+    setIsCheckingAudio(false); // Reset audio checking state
+    
+    // Stop any existing streams
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+    }
     
     const cameraStream = await checkCamera();
     const micStream = await checkMicrophone();
     
-    // Clean up function
+    setIsTestingMedia(false);
+    
+    // Return cleanup function
     return () => {
+      setIsCheckingAudio(false);
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
       }
       if (micStream) {
         micStream.getTracks().forEach(track => track.stop());
       }
-      setIsCheckingAudio(false);
     };
   };
 
   // Clean up media streams when component unmounts
   useEffect(() => {
     return () => {
+      setIsCheckingAudio(false);
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());

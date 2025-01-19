@@ -1,9 +1,8 @@
 {
-  "/api/summarize": "pages/api/summarize.js",
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/landing": "pages/landing.js",
   "/hr-dashboard": "pages/hr-dashboard.js",
-  "/test": "pages/test.js"
+  "/landing": "pages/landing.js",
+  "/": "pages/index.js"
 }
