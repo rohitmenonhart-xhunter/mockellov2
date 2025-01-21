@@ -93,7 +93,7 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [isValidated, setIsValidated] = useState(false);
   const [sessionData, setSessionData] = useState<SessionInfo | null>(null);
-  const [timeLeft, setTimeLeft] = useState(180);
+  const [timeLeft, setTimeLeft] = useState(10);
   const [showStartButton, setShowStartButton] = useState(false);
   
   // Media check states

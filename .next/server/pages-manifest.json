@@ -2,7 +2,6 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/hr-dashboard": "pages/hr-dashboard.js",
-  "/landing": "pages/landing.js",
-  "/": "pages/index.js"
+  "/": "pages/index.js",
+  "/hr-dashboard": "pages/hr-dashboard.js"
 }
